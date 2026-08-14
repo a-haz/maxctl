@@ -1,0 +1,5 @@
+#!/bin/sh
+# Re-apply TDP after resume. The daemon also loops; this just wakes it sooner.
+if [ "$1" = "post" ]; then
+  /opt/maxctl/bin/maxctl rpc reapply >/dev/null 2>&1 || true
+fi

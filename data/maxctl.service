@@ -1,0 +1,12 @@
+[Unit]
+Description=maxctl power helper for GPD Win Max 2
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/opt/maxctl/bin/maxctld
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
