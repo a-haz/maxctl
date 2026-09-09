@@ -22,6 +22,14 @@ TCTL_DEFAULT = 90
 GPU_SCLK_MIN = 600
 GPU_SCLK_MAX = 2900
 
+# eGPU mode: the HX 370 shares one STAPM budget between CPU and 890M. When an
+# external GPU (OCuLink / USB4) does the rendering, cap the iGPU so the budget
+# goes to the CPU. 1000 MHz still composites eDP + HDMI comfortably; the DPM
+# table becomes 600 / 780 / 1000 MHz.
+EGPU_IGPU_MAX_MHZ = 1000
+PCI_VENDOR_AMD = 0x1002
+PCI_VENDOR_NAMES = {0x10DE: "NVIDIA", 0x1002: "AMD", 0x8086: "Intel"}
+
 # ALIB / SMU command IDs used by AMD ACPI \_SB.ALIB 0x0C (same as HHD Adjustor).
 ALIB_STAPM_LIMIT = 0x05
 ALIB_FAST_LIMIT = 0x06
@@ -48,3 +56,7 @@ EPP_MODES = (
 )
 
 PPD_MODES = ("power-saver", "balanced", "performance")
+GOVERNORS = ("powersave", "performance")
+GPU_DPM_MODES = ("auto", "low", "high", "profile_standard", "profile_peak")
+POWER_SHIFT_MODES = ("", "saving", "max")
+USER_PRESETS_PATH = "~/.config/maxctl/presets.json"

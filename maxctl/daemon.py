@@ -9,11 +9,12 @@ import threading
 import time
 from pathlib import Path
 
+from maxctl import diagnose, ryzenadj
 from maxctl.apply import apply_settings
 from maxctl.const import SOCKET_PATH
 from maxctl.fan import FanController
-from maxctl.hardware import detect_device, read_telemetry
-from maxctl.profiles import Settings, builtin
+from maxctl.hardware import detect_device, detect_egpu, read_telemetry
+from maxctl.profiles import PROFILES, Settings, builtin
 from maxctl.state import AppConfig, load_config, load_settings, save_settings, save_system_config
 
 
@@ -26,8 +27,11 @@ class Daemon:
         self.lock = threading.Lock()
         self.stop = threading.Event()
         self.last_ac: bool | None = None
+        self.last_egpu: bool | None = None
         self.last_apply: dict = {}
         self.tdp_backend: str | None = None
+        self._smu: dict = {}
+        self._smu_t = 0.0
 
     def apply(self, settings: Settings, persist: bool = True) -> dict:
         settings = settings.clamp()
@@ -40,30 +44,49 @@ class Daemon:
             save_settings(settings)
         return result.to_dict()
 
-    def maybe_auto_switch(self, on_ac: bool) -> None:
+    def profile_settings(self, name: str) -> Settings | None:
+        if name == "custom" and self.cfg.custom:
+            return Settings.from_dict({**self.cfg.custom, "unlock": self.cfg.unlock})
+        try:
+            return builtin(name, unlock=self.cfg.unlock)
+        except KeyError:
+            return None
+
+    def boot_settings(self) -> Settings:
+        """Settings to apply at daemon start.
+
+        OCuLink eGPUs are attached before power-on, so there is never a
+        hot-plug edge to catch: decide at boot instead. Persisted settings win
+        when no eGPU is present or when the eGPU profile is already active
+        (keeps per-profile tweaks such as a different iGPU cap).
+        """
+        egpu = detect_egpu() is not None
+        self.last_egpu = egpu
+        if not (self.cfg.auto_switch and self.cfg.egpu_switch and egpu):
+            return self.settings
+        settings = self.profile_settings(self.cfg.egpu_profile)
+        if settings is None or self.settings.profile == settings.profile:
+            return self.settings
+        return settings
+
+    def maybe_auto_switch(self, on_ac: bool, egpu: bool = False) -> None:
         if not self.cfg.auto_switch:
             return
-        if self.last_ac is None:
-            self.last_ac = on_ac
-            return
-        if on_ac == self.last_ac:
-            return
+        first = self.last_ac is None
+        changed = on_ac != self.last_ac or egpu != self.last_egpu
         self.last_ac = on_ac
-        name = self.cfg.ac_profile if on_ac else self.cfg.battery_profile
-        if name == "custom" and self.cfg.custom:
-            settings = Settings.from_dict({**self.cfg.custom, "unlock": self.cfg.unlock})
-        else:
-            try:
-                settings = builtin(name, unlock=self.cfg.unlock)
-            except KeyError:
-                return
-        self.apply(settings)
+        self.last_egpu = egpu
+        if first or not changed:
+            return
+        settings = self.profile_settings(self.cfg.auto_profile(on_ac, egpu))
+        if settings is not None:
+            self.apply(settings)
 
     def loop_background(self) -> None:
         while not self.stop.wait(0.25):
             try:
                 tel = read_telemetry()
-                self.maybe_auto_switch(tel.on_ac)
+                self.maybe_auto_switch(tel.on_ac, tel.egpu is not None)
                 with self.lock:
                     settings = self.settings
                 if settings.fan_mode == "curve":
@@ -71,7 +94,7 @@ class Daemon:
                         tel.cpu_temp_c or 0.0,
                         tel.gpu_temp_c or 0.0,
                     )
-                    self.fan.tick(temp, settings.curve_points())
+                    self.fan.tick(temp, settings.curve_points(), slew=settings.fan_slew)
             except Exception:
                 pass
 
@@ -122,7 +145,19 @@ class Daemon:
                     "boost": tel.boost,
                     "gpu_perf_level": tel.gpu_perf_level,
                     "package_w": tel.package_w,
+                    "cpu_mhz": tel.cpu_mhz,
+                    "cpu_min_mhz": tel.cpu_min_mhz,
+                    "cpu_max_mhz": tel.cpu_max_mhz,
+                    "governor": tel.governor,
+                    "battery_v": tel.battery_v,
+                    "kernel": tel.kernel,
+                    "charge_limit": tel.charge_limit,
+                    "egpu_present": tel.egpu is not None,
                 },
+                "egpu": tel.egpu,
+                "limits": self.settings.limits().__dict__,
+                "smu": self.smu_table(),
+                "diagnose": diagnose.collect(),
                 "tdp_backend": backend,
                 "last_apply": last,
             }
@@ -135,7 +170,7 @@ class Daemon:
             settings = Settings.from_dict({**self.settings.to_dict(), **data})
             settings.unlock = self.cfg.unlock or bool(data.get("unlock", False))
             if any(k in data for k in ("tdp_w", "tctl_c", "epp", "gpu_mode", "fan_mode")):
-                if settings.profile in ("silent", "balanced", "performance", "turbo"):
+                if settings.profile in PROFILES:
                     builtin_match = builtin(settings.profile, unlock=settings.unlock)
                     if settings.tdp_w != builtin_match.tdp_w:
                         settings.profile = "custom"
@@ -153,7 +188,43 @@ class Daemon:
             return {"ok": True, "config": self.cfg.to_dict()}
         if cmd == "reapply":
             return {"ok": True, "apply": self.apply(self.settings)}
+        if cmd == "export":
+            return {
+                "ok": True,
+                "bundle": {
+                    "settings": self.settings.to_dict(),
+                    "config": self.cfg.to_dict(),
+                },
+            }
+        if cmd == "import":
+            bundle = msg.get("bundle") or {}
+            if bundle.get("settings"):
+                settings = Settings.from_dict(bundle["settings"])
+                settings.unlock = self.cfg.unlock or settings.unlock
+                self.apply(settings)
+            if bundle.get("config"):
+                self.cfg = AppConfig.from_dict({**self.cfg.to_dict(), **bundle["config"]})
+                try:
+                    save_system_config(self.cfg)
+                except OSError:
+                    pass
+            return {"ok": True, "settings": self.settings.to_dict(), "config": self.cfg.to_dict()}
+        if cmd == "diagnose":
+            return {"ok": True, "diagnose": diagnose.collect(), "smu": self.smu_table()}
+        if cmd == "smu":
+            return {"ok": True, "smu": self.smu_table(force=True)}
         return {"ok": False, "error": f"unknown command: {cmd}"}
+
+    def smu_table(self, force: bool = False) -> dict:
+        now = time.monotonic()
+        if not force and self._smu and now - self._smu_t < 2.0:
+            return self._smu
+        try:
+            self._smu = ryzenadj.read_table()
+        except Exception as exc:
+            self._smu = {"error": str(exc), "meta": {}, "rows": {}}
+        self._smu_t = now
+        return self._smu
 
 
 def _serve(daemon: Daemon, path: str) -> None:
@@ -207,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
     threading.Thread(target=daemon.loop_background, daemon=True).start()
     threading.Thread(target=daemon.reapply_loop, daemon=True).start()
     try:
-        daemon.apply(daemon.settings)
+        daemon.apply(daemon.boot_settings())
     except Exception:
         pass
     _serve(daemon, path)

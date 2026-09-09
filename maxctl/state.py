@@ -4,7 +4,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from maxctl.const import CONFIG_PATH, STATE_PATH, USER_CONFIG_PATH
+from maxctl.const import CONFIG_PATH, STATE_PATH, USER_CONFIG_PATH, USER_PRESETS_PATH
 from maxctl.profiles import Settings, builtin
 
 
@@ -16,6 +16,15 @@ class AppConfig:
     reapply_sec: float = 4.0
     unlock: bool = False
     custom: dict = field(default_factory=dict)
+    # Applied while an external GPU is attached (overrides AC / battery choice).
+    egpu_profile: str = "egpu"
+    egpu_switch: bool = True
+
+    def auto_profile(self, on_ac: bool, egpu: bool = False) -> str:
+        """Profile name the daemon should apply for this power / eGPU state."""
+        if egpu and self.egpu_switch and self.egpu_profile:
+            return self.egpu_profile
+        return self.ac_profile if on_ac else self.battery_profile
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -85,3 +94,31 @@ def save_settings(settings: Settings) -> None:
             json.dumps({"settings": settings.to_dict()}, indent=2) + "\n",
             encoding="utf-8",
         )
+
+
+def _presets_path() -> Path:
+    return Path(USER_PRESETS_PATH).expanduser()
+
+
+def load_presets() -> dict:
+    data = _load_json(_presets_path())
+    return data if isinstance(data, dict) else {}
+
+
+def save_preset(name: str, bundle: dict) -> None:
+    name = name.strip()
+    if not name:
+        raise ValueError("preset name required")
+    presets = load_presets()
+    presets[name] = bundle
+    path = _presets_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(presets, indent=2) + "\n", encoding="utf-8")
+
+
+def delete_preset(name: str) -> None:
+    presets = load_presets()
+    presets.pop(name, None)
+    path = _presets_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(presets, indent=2) + "\n", encoding="utf-8")

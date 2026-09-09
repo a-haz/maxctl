@@ -2,9 +2,8 @@
 Name=maxctl
 GenericName=Win Max 2 Power
 Comment=TDP, fan curve, and power control for GPD Win Max 2
-Exec=/home/aiman-hazim/Projects/maxctl/bin/maxctl-gui
-Icon=/home/aiman-hazim/Projects/maxctl/data/maxctl.svg
-Path=/home/aiman-hazim/Projects/maxctl
+Exec=maxctl-gui
+Icon=maxctl
 Terminal=false
 Type=Application
 Categories=Settings;HardwareSettings;System;

@@ -36,29 +36,41 @@ def format_call(payload: bytes) -> str:
     return f"\\_SB.ALIB 0x0c b{payload.hex()}"
 
 
-def tdp_params(tdp_w: int, tctl_c: int, boost: bool) -> list[tuple[int, int]]:
-    stapm = tdp_w * 1000
-    if boost:
-        fast = int(tdp_w * (32 / 28) * 1000)
-        slow = min((tdp_w + 2) * 1000, fast)
+def tdp_params(tdp_w: int, tctl_c: int, boost: bool, limits=None) -> list[tuple[int, int]]:
+    if limits is not None:
+        stapm = limits.stapm_w * 1000
+        fast = limits.fast_w * 1000
+        slow = limits.slow_w * 1000
+        skin = limits.skin_w * 1000
+        tctl_c = limits.tctl_c
+        slow_time = limits.slow_time
+        stapm_time = limits.stapm_time
     else:
-        fast = stapm
-        slow = stapm
+        stapm = tdp_w * 1000
+        if boost:
+            fast = int(tdp_w * (32 / 28) * 1000)
+            slow = min((tdp_w + 2) * 1000, fast)
+        else:
+            fast = stapm
+            slow = stapm
+        skin = stapm
+        slow_time = 10
+        stapm_time = 100
     return [
         (ALIB_STAPM_LIMIT, stapm),
         (ALIB_FAST_LIMIT, fast),
         (ALIB_SLOW_LIMIT, slow),
-        (ALIB_SKIN_LIMIT, stapm),
+        (ALIB_SKIN_LIMIT, skin),
         (ALIB_TEMP_TARGET, tctl_c),
-        (ALIB_SLOW_TIME, 10),
-        (ALIB_STAPM_TIME, 100),
+        (ALIB_SLOW_TIME, slow_time),
+        (ALIB_STAPM_TIME, stapm_time),
     ]
 
 
-def apply_tdp(tdp_w: int, tctl_c: int, boost: bool) -> str:
+def apply_tdp(tdp_w: int, tctl_c: int, boost: bool, limits=None) -> str:
     if not available():
         raise RuntimeError("acpi_call is not loaded (/proc/acpi/call missing)")
-    payload = encode_alib(tdp_params(tdp_w, tctl_c, boost))
+    payload = encode_alib(tdp_params(tdp_w, tctl_c, boost, limits=limits))
     cmd = format_call(payload)
     ACPI_CALL.write_bytes(cmd.encode())
     return cmd
