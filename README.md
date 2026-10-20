@@ -1,8 +1,8 @@
 # maxctl
 
-TDP, power profiles, iGPU clocks, and fan control for the **GPD Win Max 2 2025** (G1619-05, Ryzen AI 9 HX 370) on Ubuntu.
+TDP, power profiles, iGPU clocks, and fan control for the GPD Win Max 2 2025 (G1619-05, Ryzen AI 9 HX 370) on Ubuntu.
 
-Ubuntu only ships `power-profiles-daemon`, which changes CPU preference. It does not set STAPM / PPT, Tctl, or the GPD EC fan. This app does.
+Ubuntu only ships `power-profiles-daemon`, which changes CPU preference but does not set STAPM / PPT, Tctl or the GPD EC fan. maxctl does.
 
 ## What it controls
 
@@ -17,11 +17,11 @@ Ubuntu only ships `power-profiles-daemon`, which changes CPU preference. It does
 | AC / battery | auto profile switch + re-apply after sleep |
 | eGPU | PCI detection → iGPU capped, budget to CPU |
 
-Presets: **Silent 12W**, **Balanced 28W**, **Sport 35W**, **Turbo 40W**, **eGPU 28W**. 28–35W is the sweet spot on this chassis. GPD advertises 35W; 54W is AMD cTDP max and runs hot.
+The presets are Silent 12W, Balanced 28W, Sport 35W, Turbo 40W and eGPU 28W. 28 to 35W works best on this chassis. GPD advertises 35W; 54W is the AMD cTDP max and runs hot.
 
 ### eGPU mode
 
-The HX 370 shares one STAPM / PPT budget between the cores and the 890M. With an external GPU (OCuLink or USB4) doing the rendering, the **eGPU** profile pins the iGPU to 600–1000 MHz (`pp_od_clk_voltage`, DPM table becomes 600 / 780 / 1000) and keeps the Balanced 28W tier (EPP `balance_performance`), so the budget is spent on the CPU. It stays at 28W on purpose: the 35W / EPP-performance tier is where this chassis's SMU has hung (black screen); raise the TDP slider only once that is proven stable. 1000 MHz still composites the internal panel plus HDMI without stutter; raise **Max clock** under *iGPU* if you drive the built-in display hard.
+The HX 370 shares one STAPM / PPT budget between the cores and the 890M. With an external GPU (OCuLink or USB4) doing the rendering, the eGPU profile pins the iGPU to 600 to 1000 MHz (`pp_od_clk_voltage`, DPM table 600 / 780 / 1000) and keeps the Balanced 28W tier (EPP `balance_performance`), so the budget goes to the CPU. It stays at 28W because the SMU on this chassis has hung (black screen) at the 35W / EPP-performance tier. 1000 MHz still drives the internal panel plus HDMI without stutter; raise Max clock under iGPU if you use the built-in display heavily.
 
 Detection is a PCI display-class device that is not the APU (`/sys/bus/pci/devices/*/class` = `0x03…`). The helper applies the eGPU profile at boot when a dock is already attached (OCuLink is not hot-plug) and on attach / detach edges when it is; on detach it falls back to the AC / battery profile. Config keys: `egpu_switch` (default `true`), `egpu_profile` (default `egpu`).
 
@@ -34,15 +34,14 @@ maxctl profile egpu    # apply by hand
 
 ## Install
 
-Project path: `~/Workspace/Projects/maxctl`
+From the repository root:
 
 ```bash
-cd ~/Workspace/Projects/maxctl
 sudo ./scripts/install.sh
 maxctl-gui
 ```
 
-The helper (`maxctld`) stays running so TDP is re-applied every few seconds. Firmware and `power-profiles-daemon` like to reset SMU limits.
+The helper (`maxctld`) keeps running and re-applies TDP every few seconds, because firmware and `power-profiles-daemon` tend to reset SMU limits.
 
 ```bash
 maxctl status
@@ -64,14 +63,14 @@ Applying TDP needs root and either `acpi_call` (`acpi-call-dkms`) or `ryzenadj`.
 
 ## Safety
 
-Values are clamped. Default ceiling is 40W. Unlock 54W only if you accept more heat and fan noise. This talks to the SMU the same way Motion Assistant / HHD do; bad limits can still thermal-throttle or trip the machine.
+Values are clamped and the default ceiling is 40W. Unlocking 54W means more heat and fan noise. maxctl talks to the SMU the same way Motion Assistant and HHD do, and bad limits can still thermal-throttle or trip the machine.
 
 ## Power user
 
-The **Power user** tab is for raw SMU / clock work. Overview stays the simple 12 / 28 / 35 / 40W path.
+The Power user tab is for raw SMU and clock settings. The Overview tab keeps to the 12 / 28 / 35 / 40W presets. It has:
 
 - Manual STAPM / Fast PPT / Slow PPT / Skin, plus STAPM and Slow times
-- Recipes: **Flat** (all rails = TDP), **Burst** (short Fast above TDP), **Efficiency** (lower sustained, keep a little burst)
+- Recipes: Flat (all rails = TDP), Burst (short Fast above TDP), Efficiency (lower sustained, a little burst)
 - Live SMU readback from `ryzenadj -i` (limit vs current draw). Strix Point often reports NaN for times / TDC / EDC
 - CPU min/max MHz, governor, nonlinear min
 - iGPU DPM (`auto` / `low` / `high` / `profile_standard` / `profile_peak`)
@@ -97,5 +96,3 @@ maxctl set --governor powersave --cpu-min 400 --dpm low --charge 80
 maxctl preset save desk-28
 maxctl export ~/maxctl-profile.json
 ```
-
-Project path: `~/Workspace/Projects/maxctl`
