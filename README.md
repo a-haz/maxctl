@@ -65,6 +65,19 @@ Applying TDP needs root and either `acpi_call` (`acpi-call-dkms`) or `ryzenadj`.
 
 Values are clamped and the default ceiling is 40W. Unlocking 54W means more heat and fan noise. maxctl talks to the SMU the same way Motion Assistant and HHD do, and bad limits can still thermal-throttle or trip the machine.
 
+## IMU
+
+The Win Max 2 has a Bosch BMI260 IMU. The in-tree `bmi270_i2c` driver exposes it under `/sys/bus/iio/devices` once its init blob loads; linux-firmware ships it as `bmi260-init-data.fw`. `maxctl imu` reads it as your user, no root needed.
+
+```bash
+maxctl imu log --label desk --seconds 120 --out ~/imu   # imu_desk_<time>.csv
+maxctl imu summary ~/imu/imu_desk_20261020_101500.csv
+maxctl imu bias ~/imu/imu_desk_20261020_101500.csv --out ~/imu
+maxctl imu apply other.csv --bias ~/imu/imu_desk_20261020_101500.bias.json --out ~/imu
+```
+
+`log` polls the sysfs channels (default 100 Hz) and writes `t_mono_ns, t_wall_ns, gx, gy, gz` (rad/s), `ax, ay, az` (m/s2) and `temp_c` (on every tenth row). Keep the machine still for `bias`. It drops the first 15 s, flags samples above 1 deg/s or 0.5 m/s2 from the median and drops 0.5 s around them, then reports the gyro bias, noise, split-half and trend checks, Allan deviation from 0.1 to 40 s, and heading drift with and without the bias (including first-half bias applied to the second half). With `--out` it also writes a bias-corrected CSV. `--accel-bias level` subtracts the accelerometer offset too, which only makes sense if the machine sat level; set `--g` to your local gravity.
+
 ## Power user
 
 The Power user tab is for raw SMU and clock settings. The Overview tab keeps to the 12 / 28 / 35 / 40W presets. It has:
