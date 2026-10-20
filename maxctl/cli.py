@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
 from pathlib import Path
 
-from maxctl import __version__, alib, diagnose, ryzenadj
+from maxctl import __version__, alib, diagnose, imu, ryzenadj
 from maxctl.apply import apply_settings
 from maxctl.client import HelperError, connected, request
 from maxctl.hardware import detect_device, read_telemetry
@@ -101,6 +102,34 @@ def main(argv: list[str] | None = None) -> int:
     p_egpu = sub.add_parser("egpu", help="external GPU detection and auto-switch (on / off)")
     p_egpu.add_argument("action", nargs="?", default="status", choices=["status", "on", "off"])
     p_egpu.add_argument("--profile", help="profile to apply while an eGPU is attached")
+    p_imu = sub.add_parser("imu", help="log and analyse the built-in IMU (BMI260)")
+    imu_sub = p_imu.add_subparsers(dest="imu_cmd", required=True)
+    p_ilog = imu_sub.add_parser("log", help="record gyro + accel to CSV")
+    p_ilog.add_argument("--label", default="rec")
+    p_ilog.add_argument("--seconds", type=float, default=120.0)
+    p_ilog.add_argument("--rate", type=float, default=100.0, help="polling rate in Hz")
+    p_ilog.add_argument("--out", default=".", help="folder for imu_<label>_<time>.csv")
+    p_ilog.add_argument("--progress", action="store_true")
+    p_isum = imu_sub.add_parser("summary", help="rate, gaps and integrated angle of a recording")
+    p_isum.add_argument("csv")
+    p_isum.add_argument("--bias", help="bias report JSON whose gyro bias is subtracted")
+    p_ibias = imu_sub.add_parser("bias", help="still test: gyro bias, noise, Allan deviation, drift")
+    p_ibias.add_argument("csv")
+    p_ibias.add_argument("--skip", type=float, default=15.0, help="seconds dropped at the start")
+    p_ibias.add_argument("--tail", type=float, default=0.0, help="seconds dropped at the end")
+    p_ibias.add_argument("--window", type=float, nargs=2, metavar=("A", "B"), help="use [A, B] s instead")
+    p_ibias.add_argument("--motion-gyro-dps", type=float, default=1.0)
+    p_ibias.add_argument("--motion-accel", type=float, default=0.5)
+    p_ibias.add_argument("--guard", type=float, default=0.5, help="seconds dropped around a flagged sample")
+    p_ibias.add_argument("--accel-bias", choices=["none", "level"], default="none")
+    p_ibias.add_argument("--g", type=float, default=9.80665, help="local gravity for --accel-bias level")
+    p_ibias.add_argument("--out", help="write <name>.bias.json and a bias-corrected CSV here")
+    p_ibias.add_argument("--overwrite", action="store_true")
+    p_iapp = imu_sub.add_parser("apply", help="subtract a bias report from another recording")
+    p_iapp.add_argument("csv")
+    p_iapp.add_argument("--bias", required=True, help="bias report JSON from maxctl imu bias --out")
+    p_iapp.add_argument("--out", required=True)
+    p_iapp.add_argument("--overwrite", action="store_true")
 
     args = parser.parse_args(argv)
     if args.cmd in (None, "status"):
@@ -142,6 +171,8 @@ def main(argv: list[str] | None = None) -> int:
         return _preset(args.action, args.name)
     if args.cmd == "egpu":
         return _egpu(args.action, args.profile)
+    if args.cmd == "imu":
+        return _imu(args)
     try:
         if args.cmd == "profile":
             print(json.dumps(_rpc_or_root("set_profile", name=args.name), indent=2))
@@ -381,6 +412,79 @@ def _egpu(action: str, profile: str | None) -> int:
         return 1
     cfg = reply.get("config") or {}
     print(f"Auto-switch {'on' if cfg.get('egpu_switch', True) else 'off'}  -> {cfg.get('egpu_profile', 'egpu')}")
+    return 0
+
+
+def _imu_outputs(src: Path, out_dir: Path, tag: str, overwrite: bool) -> tuple[Path, Path]:
+    csv_out = out_dir / f"{src.stem}.{tag}.csv"
+    json_out = out_dir / f"{src.stem}.{tag}.json"
+    for path in (csv_out, json_out):
+        if path.resolve() == src.resolve():
+            raise imu.ImuError("refusing to write over the input")
+        if path.exists() and not overwrite:
+            raise imu.ImuError(f"{path} exists (pass --overwrite)")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return csv_out, json_out
+
+
+def _imu(args) -> int:
+    try:
+        if args.imu_cmd == "log":
+            out = Path(args.out).expanduser() / f"imu_{args.label}_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+            print(f"Recording {args.seconds:.0f} s at {args.rate:.0f} Hz -> {out}", flush=True)
+            progress = (lambda s: print(f"  {s:.0f} s", flush=True)) if args.progress else None
+            meta = imu.record(out, args.seconds, args.rate, progress=progress)
+            result = imu.summary(imu.load(out))
+            result["meta"] = meta
+            Path(str(out) + ".summary.json").write_text(json.dumps(result, indent=1) + "\n")
+        elif args.imu_cmd == "summary":
+            bias = (0.0, 0.0, 0.0)
+            if args.bias:
+                bias = json.loads(Path(args.bias).read_text())["gyro_bias_rad_s"]
+            result = imu.summary(imu.load(args.csv), bias)
+        elif args.imu_cmd == "bias":
+            rec = imu.load(args.csv)
+            result = imu.analyze(
+                rec, skip=args.skip, tail=args.tail, window=tuple(args.window) if args.window else None,
+                motion_gyro_dps=args.motion_gyro_dps, motion_accel=args.motion_accel, guard=args.guard, g=args.g,
+            )
+            abias = result["accel_bias_if_level_m_s2"] if args.accel_bias == "level" else [0.0, 0.0, 0.0]
+            result["accel_bias_mode"] = args.accel_bias
+            result["accel_bias_subtracted_m_s2"] = abias
+            if args.out:
+                src = Path(args.csv)
+                csv_out, json_out = _imu_outputs(src, Path(args.out).expanduser(), "bias", args.overwrite)
+                imu.write_corrected(rec, csv_out, result["gyro_bias_rad_s"], abias)
+                result["input_sha256"] = imu.sha256(src)
+                result["written"] = imu.now_iso()
+                result["output_csv"] = str(csv_out)
+                json_out.write_text(json.dumps(result, indent=1) + "\n")
+        else:
+            report = json.loads(Path(args.bias).read_text())
+            src = Path(args.csv)
+            rec = imu.load(src)
+            csv_out, json_out = _imu_outputs(src, Path(args.out).expanduser(), "biasapplied", args.overwrite)
+            gbias = report["gyro_bias_rad_s"]
+            abias = report.get("accel_bias_subtracted_m_s2", [0.0, 0.0, 0.0])
+            imu.write_corrected(rec, csv_out, gbias, abias)
+            result = {
+                "file": str(src),
+                "input_sha256": imu.sha256(src),
+                "bias_report": str(args.bias),
+                "gyro_bias_subtracted_deg_s": [round(math.degrees(b), 6) for b in gbias],
+                "accel_bias_subtracted_m_s2": abias,
+                "integrated_deg_raw": [round(math.degrees(x), 6) for x in imu.integrate(rec.gyro, rec.t)],
+                "integrated_deg_corrected": [
+                    round(math.degrees(x), 6) for x in imu.integrate(rec.gyro, rec.t, gbias)
+                ],
+                "written": imu.now_iso(),
+                "output_csv": str(csv_out),
+            }
+            json_out.write_text(json.dumps(result, indent=1) + "\n")
+    except (imu.ImuError, OSError, KeyError, ValueError) as exc:
+        print(f"maxctl: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2))
     return 0
 
 
