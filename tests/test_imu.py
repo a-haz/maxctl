@@ -212,6 +212,19 @@ class ImuDeviceTests(unittest.TestCase):
             self.assertAlmostEqual(float(rows[0]["temp_c"]), (180 + 11776) * 1.953125 / 1000, places=3)
             self.assertEqual(rows[1]["temp_c"], "")
 
+    def test_sensor_not_running(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dev = self.fake_iio(Path(tmp) / "iio")
+            for name in ("anglvel_x", "anglvel_y", "anglvel_z", "accel_x", "accel_y", "accel_z"):
+                (dev / f"in_{name}_raw").write_text("0\n")
+            (dev / "in_temp_raw").write_text("-32768\n")
+            out = Path(tmp) / "zero.csv"
+            imu.record(out, seconds=2.0, rate=100.0, dev=dev)
+            with out.open() as fh:
+                self.assertTrue(all(r["temp_c"] == "" for r in csv.DictReader(fh)))
+            with self.assertRaises(imu.ImuError):
+                imu.summary(imu.load(out))
+
 
 if __name__ == "__main__":
     unittest.main()

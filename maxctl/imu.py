@@ -32,6 +32,7 @@ COLUMNS = ("t_mono_ns", "t_wall_ns", "gx", "gy", "gz", "ax", "ay", "az", "temp_c
 AXES = ("x", "y", "z")
 TAUS = (0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, 40.0)
 STANDARD_GRAVITY = 9.80665
+TEMP_INVALID = -32768  # 0x8000, the BMI260 "no valid temperature" value
 
 
 class ImuError(Exception):
@@ -104,7 +105,9 @@ def record(
                 raw = [int(os.pread(fd, 32, 0)) for fd in fds]
                 temp = ""
                 if temp_fd is not None and i % 10 == 0:
-                    temp = f"{(int(os.pread(temp_fd, 32, 0)) + toff) * tscale / 1000.0:.3f}"
+                    traw = int(os.pread(temp_fd, 32, 0))
+                    if traw != TEMP_INVALID:
+                        temp = f"{(traw + toff) * tscale / 1000.0:.3f}"
                 t1 = time.monotonic_ns()
                 w.writerow(
                     [(t0 + t1) // 2, time.time_ns()]
@@ -242,6 +245,11 @@ def _r6(v) -> list[float]:
 def _up(accel_mean) -> tuple[int, float, list[float], float, float]:
     """(axis index, sign, unit vector, |g|, tilt in degrees) from the mean specific force."""
     norm = math.sqrt(sum(x * x for x in accel_mean))
+    if norm == 0.0:
+        raise ImuError(
+            "accelerometer reads all zeros; the sensor is not running "
+            "(usually the bmi260 init firmware did not load, see dmesg)"
+        )
     idx = max(range(3), key=lambda k: abs(accel_mean[k]))
     sign = 1.0 if accel_mean[idx] > 0 else -1.0
     unit = [x / norm for x in accel_mean]
