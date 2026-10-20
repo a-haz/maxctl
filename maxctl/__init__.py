@@ -1,3 +1,3 @@
-"""maxctl — TDP, power profiles, and fan control for GPD Win Max 2."""
+"""maxctl: TDP, power profiles, and fan control for GPD Win Max 2."""
 
 __version__ = "1.3.0"

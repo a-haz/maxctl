@@ -59,7 +59,7 @@ PROFILE_CHOICES = ["silent", "balanced", "performance", "turbo", "egpu", "custom
 SHIFT_CHOICES = ["off", "saving", "max"]
 
 
-def _fmt(value, digits=0, suffix="", fallback="—"):
+def _fmt(value, digits=0, suffix="", fallback="-"):
     if value is None:
         return fallback
     if digits == 0:
@@ -142,7 +142,7 @@ class MaxctlWindow(Adw.ApplicationWindow):
         page.set_margin_start(16)
         page.set_margin_end(16)
 
-        self.banner = Adw.Banner(title="Helper is not installed — live sensors work, TDP apply needs install")
+        self.banner = Adw.Banner(title="Helper is not installed; live sensors work, TDP apply needs install")
         self.banner.set_button_label("How")
         self.banner.connect("button-clicked", self._install_help)
         page.append(self.banner)
@@ -211,7 +211,7 @@ class MaxctlWindow(Adw.ApplicationWindow):
         self.d_epp = Adw.ActionRow(title="EPP / boost")
         self.d_apply = Adw.ActionRow(title="Last apply")
         for live in (self.d_pkg, self.d_clk, self.d_busy, self.d_smu, self.d_epp, self.d_apply):
-            live.set_subtitle("—")
+            live.set_subtitle("-")
             details.add(live)
         page.append(details)
 
@@ -388,7 +388,7 @@ class MaxctlWindow(Adw.ApplicationWindow):
         self.s_slow = Adw.ActionRow(title="Slow PPT")
         self.s_meta = Adw.ActionRow(title="PM table")
         for row in (self.s_stapm, self.s_fast, self.s_slow, self.s_meta):
-            row.set_subtitle("—")
+            row.set_subtitle("-")
             live.add(row)
         box.append(live)
 
@@ -545,7 +545,7 @@ class MaxctlWindow(Adw.ApplicationWindow):
         box.set_margin_bottom(10)
         label = Gtk.Label(label=title, xalign=0)
         label.add_css_class("metric-label")
-        value = Gtk.Label(label="—", xalign=0)
+        value = Gtk.Label(label="-", xalign=0)
         value.add_css_class("metric-value")
         inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         inner.set_margin_start(12)
@@ -977,7 +977,7 @@ class MaxctlWindow(Adw.ApplicationWindow):
         if err:
             self.s_meta.set_subtitle(str(err)[:80])
         else:
-            ver = meta.get("PM Table Version") or meta.get("Version") or "—"
+            ver = meta.get("PM Table Version") or meta.get("Version") or "-"
             family = meta.get("CPU Family") or ""
             self.s_meta.set_subtitle(f"{family}  {ver}".strip())
 
@@ -1062,16 +1062,16 @@ class MaxctlWindow(Adw.ApplicationWindow):
         self.d_clk.set_subtitle(
             f"{_fmt(tel.get('cpu_mhz'), 0, ' MHz')}  "
             f"({_fmt(tel.get('cpu_min_mhz'))}–{_fmt(tel.get('cpu_max_mhz'))})  "
-            f"{tel.get('governor') or '—'}"
+            f"{tel.get('governor') or '-'}"
         )
         busy = tel.get("gpu_busy_pct")
         self.d_busy.set_subtitle(
-            f"{_fmt(busy, 0, '%')}  {tel.get('gpu_clock_mhz') or '—'} MHz  "
+            f"{_fmt(busy, 0, '%')}  {tel.get('gpu_clock_mhz') or '-'} MHz  "
             f"{tel.get('gpu_perf_level') or 'auto'}"
         )
         boost = tel.get("boost")
         self.d_epp.set_subtitle(
-            f"{tel.get('epp') or '—'}  boost={'on' if boost else 'off' if boost is not None else '—'}"
+            f"{tel.get('epp') or '-'}  boost={'on' if boost else 'off' if boost is not None else '-'}"
         )
         if last_apply:
             backend = last_apply.get("tdp_backend") or "none"

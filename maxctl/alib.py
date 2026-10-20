@@ -1,4 +1,4 @@
-"""AMD ACPI ALIB TDP control — same SMU path Handheld Daemon / Adjustor uses."""
+"""AMD ACPI ALIB TDP control, same SMU path Handheld Daemon / Adjustor uses."""
 
 from __future__ import annotations
 
