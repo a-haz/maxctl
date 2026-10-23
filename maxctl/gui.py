@@ -567,7 +567,7 @@ class MaxctlWindow(Adw.ApplicationWindow):
 
     def _install_help(self, *_args) -> None:
         self.toast.add_toast(
-            Adw.Toast(title="In ~/Workspace/Projects/maxctl: sudo ./scripts/install.sh")
+            Adw.Toast(title="From the maxctl folder, run: sudo ./scripts/install.sh")
         )
 
     def _on_unlock(self, *_args) -> None:
