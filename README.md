@@ -109,3 +109,7 @@ maxctl set --governor powersave --cpu-min 400 --dpm low --charge 80
 maxctl preset save desk-28
 maxctl export ~/maxctl-profile.json
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
