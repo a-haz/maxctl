@@ -30,7 +30,7 @@ def _print_telemetry() -> None:
     if tel.gpu_temp_c is not None:
         print(f"GPU    {tel.gpu_temp_c:.1f} C  {tel.gpu_clock_mhz or '?'} MHz  {tel.gpu_power_w or 0:.1f} W")
     if tel.fan_rpm is not None:
-        mode = {0: "full", 1: "manual", 2: "auto"}.get(tel.fan_mode or -1, str(tel.fan_mode))
+        mode = {0: "full", 1: "manual", 2: "auto"}.get(tel.fan_mode, str(tel.fan_mode))
         print(f"Fan    {tel.fan_rpm} RPM  pwm={tel.fan_pwm}  {mode}")
     if tel.cpu_mhz:
         print(f"CPU    {tel.cpu_mhz} MHz  {tel.cpu_min_mhz}-{tel.cpu_max_mhz}  {tel.governor}")
