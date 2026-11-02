@@ -202,6 +202,28 @@ class SocketTests(unittest.TestCase):
         self.assertTrue(reply["ok"])
         self.assertEqual(self.daemon.seen[-1]["settings"], {"tdp_w": 20})
 
+    def test_client_hanging_up_early_does_not_stop_the_server(self):
+        for _ in range(5):
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                sock.connect(self.path)
+                sock.sendall(b'{"cmd": "ping"}\n')
+        self.assertTrue(self.ask(b'{"cmd": "ping"}\n')["ok"])
+        self.assertTrue(self.thread.is_alive())
+
+    def test_stalled_client_does_not_block_others(self):
+        with (
+            mock.patch.object(daemon_mod, "CLIENT_TIMEOUT", 0.2),
+            socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as idle,
+        ):
+            idle.connect(self.path)  # connects and never sends a request
+            self.assertTrue(self.ask(b'{"cmd": "ping"}\n')["ok"])
+
+    def test_oversized_request_is_refused(self):
+        with mock.patch.object(daemon_mod, "MAX_REQUEST_BYTES", 1024):
+            reply = self.ask(b'{"cmd": "ping", "pad": "' + b"x" * 4096 + b'"}\n')
+        self.assertFalse(reply["ok"])
+        self.assertEqual(self.daemon.seen, [])
+
 
 class IsAdminTests(unittest.TestCase):
     GROUPS = {"sudo": 27, "admin": 117}

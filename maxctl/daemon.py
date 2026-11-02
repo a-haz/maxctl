@@ -32,6 +32,9 @@ from maxctl.state import (
 # a member of the groups Ubuntu's polkit treats as administrators.
 READ_ONLY_COMMANDS = frozenset({"ping", "status", "export", "diagnose"})
 ADMIN_GROUPS = ("sudo", "admin", "wheel")
+# Clients are served one at a time, so a stalled or oversized request is cut off.
+CLIENT_TIMEOUT = 2.0
+MAX_REQUEST_BYTES = 1 << 20
 
 
 def release_fan() -> bool:
@@ -306,6 +309,7 @@ def _serve(daemon: Daemon, path: str) -> None:
         except OSError:
             break
         with conn:
+            conn.settimeout(CLIENT_TIMEOUT)
             try:
                 data = b""
                 while b"\n" not in data:
@@ -313,6 +317,8 @@ def _serve(daemon: Daemon, path: str) -> None:
                     if not chunk:
                         break
                     data += chunk
+                    if len(data) > MAX_REQUEST_BYTES:
+                        raise ValueError("request too large")
                 msg = json.loads(data.decode().strip() or "{}")
                 cmd = msg.get("cmd")
                 _pid, uid, gid = peer_credentials(conn)
@@ -325,7 +331,10 @@ def _serve(daemon: Daemon, path: str) -> None:
                     }
             except Exception as exc:
                 reply = {"ok": False, "error": str(exc)}
-            conn.sendall((json.dumps(reply) + "\n").encode())
+            try:
+                conn.sendall((json.dumps(reply) + "\n").encode())
+            except OSError:
+                pass  # the client hung up or stopped reading; serve the next one
     server.close()
     try:
         sock_path.unlink()
