@@ -102,17 +102,31 @@ class Daemon:
         while not self.stop.wait(0.25):
             try:
                 tel = read_telemetry()
-                self.maybe_auto_switch(tel.on_ac, tel.egpu is not None)
-                with self.lock:
-                    settings = self.settings
-                if settings.fan_mode == "curve":
-                    temp = max(
-                        tel.cpu_temp_c or 0.0,
-                        tel.gpu_temp_c or 0.0,
-                    )
-                    self.fan.tick(temp, settings.curve_points(), slew=settings.fan_slew)
             except Exception:
-                pass
+                tel = None
+            if tel is not None:
+                try:
+                    self.maybe_auto_switch(tel.on_ac, tel.egpu is not None)
+                except Exception:
+                    pass
+            with self.lock:
+                settings = self.settings
+            if settings.fan_mode == "curve":
+                self.curve_tick(tel, settings)
+
+    def curve_tick(self, tel, settings: Settings) -> None:
+        """One software fan-curve step.
+
+        Without a temperature the curve would run blind, so the fan goes back
+        to the EC (which reads its own sensor) until a reading comes back.
+        """
+        temps = [] if tel is None else [t for t in (tel.cpu_temp_c, tel.gpu_temp_c) if t is not None]
+        try:
+            if not temps:
+                raise RuntimeError("no CPU or GPU temperature")
+            self.fan.tick(max(temps), settings.curve_points(), slew=settings.fan_slew)
+        except Exception:
+            release_fan()
 
     def reapply_loop(self) -> None:
         while not self.stop.wait(max(1.0, self.cfg.reapply_sec)):

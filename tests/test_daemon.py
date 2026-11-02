@@ -53,6 +53,48 @@ class _DaemonCase(unittest.TestCase):
     def fan_state(self) -> tuple[int, int]:
         return int((self.hwmon / "pwm1_enable").read_text()), int((self.hwmon / "pwm1").read_text())
 
+    @staticmethod
+    def run_background_once(daemon) -> None:
+        daemon.stop = mock.Mock()
+        daemon.stop.wait.side_effect = [False, True]
+        daemon.loop_background()
+
+
+class FanFailSafeTests(_DaemonCase):
+    def test_curve_drives_the_fan_from_temperature(self):
+        daemon = daemon_mod.Daemon()
+        with mock.patch.object(daemon_mod, "read_telemetry", return_value=_telemetry(cpu=85.0, gpu=60.0)):
+            self.run_background_once(daemon)
+        enable, pwm = self.fan_state()
+        self.assertEqual(enable, FAN_MANUAL)
+        self.assertGreater(pwm, 80)  # ramping up from the controller's start value
+
+    def test_curve_without_a_temperature_hands_the_fan_to_the_ec(self):
+        # Both sensors missing used to read as 0 C, i.e. the curve's minimum.
+        self.write_fan(FAN_MANUAL, 200)
+        daemon = daemon_mod.Daemon()
+        with mock.patch.object(daemon_mod, "read_telemetry", return_value=_telemetry()):
+            self.run_background_once(daemon)
+        self.assertEqual(self.fan_state()[0], FAN_AUTO)
+
+    def test_telemetry_error_hands_the_fan_to_the_ec(self):
+        self.write_fan(FAN_MANUAL, 200)
+        daemon = daemon_mod.Daemon()
+        with mock.patch.object(daemon_mod, "read_telemetry", side_effect=OSError("sysfs gone")):
+            self.run_background_once(daemon)
+        self.assertEqual(self.fan_state()[0], FAN_AUTO)
+
+    def test_auto_switch_error_does_not_freeze_the_curve(self):
+        daemon = daemon_mod.Daemon()
+        with (
+            mock.patch.object(daemon_mod, "read_telemetry", return_value=_telemetry(cpu=85.0)),
+            mock.patch.object(daemon, "maybe_auto_switch", side_effect=RuntimeError("apply failed")),
+        ):
+            self.run_background_once(daemon)
+        enable, pwm = self.fan_state()
+        self.assertEqual(enable, FAN_MANUAL)
+        self.assertGreater(pwm, 80)
+
 
 class DaemonExitTests(_DaemonCase):
     def _main(self, serve) -> int:
