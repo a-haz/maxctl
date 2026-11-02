@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PREFIX="${PREFIX:-/opt/maxctl}"
+# Fixed on purpose: the unit, the sleep hook and uninstall.sh all use this
+# path, and it is deleted and recreated on every install.
+PREFIX=/opt/maxctl
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run as root: sudo $0"
