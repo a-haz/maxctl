@@ -11,6 +11,8 @@ from maxctl.const import (
     GPU_SCLK_MIN,
     POWER_SHIFT_MODES,
     TCTL_DEFAULT,
+    TCTL_MAX,
+    TCTL_MIN,
     TDP_DEFAULT,
     TDP_MIN,
     TDP_SAFE_MAX,
@@ -66,7 +68,7 @@ class Settings:
     def clamp(self) -> Settings:
         tmax = TDP_UNLOCK_MAX if self.unlock else TDP_SAFE_MAX
         self.tdp_w = max(TDP_MIN, min(tmax, int(self.tdp_w)))
-        self.tctl_c = max(70, min(100, int(self.tctl_c)))
+        self.tctl_c = max(TCTL_MIN, min(TCTL_MAX, int(self.tctl_c)))
         self.epp = self.epp if self.epp in EPP_MODES else "balance_performance"
         self.gpu_min = max(GPU_SCLK_MIN, min(GPU_SCLK_MAX, int(self.gpu_min)))
         self.gpu_max = max(self.gpu_min, min(GPU_SCLK_MAX, int(self.gpu_max)))
