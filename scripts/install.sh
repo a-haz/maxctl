@@ -36,7 +36,12 @@ fi
 
 rm -rf "${PREFIX}"
 mkdir -p "${PREFIX}"
-cp -a "${ROOT}/maxctl" "${ROOT}/bin" "${ROOT}/data" "${PREFIX}/"
+# Root runs this code (maxctld, the sleep hook), so only root may own or write
+# it. cp -a would keep the invoking user's ownership, and Python would load
+# that user's __pycache__ as is.
+cp -R "${ROOT}/maxctl" "${ROOT}/bin" "${ROOT}/data" "${PREFIX}/"
+find "${PREFIX}" -name __pycache__ -prune -exec rm -rf {} +
+chmod -R go-w "${PREFIX}"
 chmod 755 "${PREFIX}/bin/"*
 
 if [[ ! -x "${PREFIX}/bin/ryzenadj" ]]; then
