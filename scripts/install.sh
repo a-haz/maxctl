@@ -68,7 +68,9 @@ install -Dm755 "${PREFIX}/data/maxctl-sleep" /lib/systemd/system-sleep/maxctl
 mkdir -p /etc/maxctl /var/lib/maxctl /run/maxctl
 
 systemctl daemon-reload
-systemctl enable --now maxctl.service
+systemctl enable maxctl.service
+# restart, not start: a reinstall has to replace a helper that is already running
+systemctl restart maxctl.service
 gtk-update-icon-cache -f /usr/share/icons/hicolor >/dev/null 2>&1 || true
 update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
 
