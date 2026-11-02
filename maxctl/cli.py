@@ -61,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
     p_tdp = sub.add_parser("tdp", help="set TDP in watts")
     p_tdp.add_argument("watts", type=int)
     p_tdp.add_argument("--no-boost", action="store_true")
-    p_fan = sub.add_parser("fan", help="fan mode: auto, or a PWM 0-255")
+    p_fan = sub.add_parser("fan", help="fan mode: auto, curve, or a PWM 0-255")
     p_fan.add_argument("value")
     sub.add_parser("gui", help="open the GTK window")
     sub.add_parser("daemon", help="run maxctld in the foreground")
@@ -192,7 +192,14 @@ def main(argv: list[str] | None = None) -> int:
             elif args.value == "curve":
                 payload = {"fan_mode": "curve"}
             else:
-                payload = {"fan_mode": "manual", "fan_pwm": int(args.value)}
+                try:
+                    pwm = int(args.value)
+                except ValueError:
+                    pwm = -1
+                if not 0 <= pwm <= 255:
+                    print(f"maxctl: fan takes auto, curve or a PWM 0-255, not {args.value!r}", file=sys.stderr)
+                    return 1
+                payload = {"fan_mode": "manual", "fan_pwm": pwm}
             print(json.dumps(_rpc_or_root("set_settings", settings=payload), indent=2))
         elif args.cmd == "rpc":
             extra = json.loads(args.json)
