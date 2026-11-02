@@ -509,7 +509,7 @@ class MaxctlWindow(Adw.ApplicationWindow):
         box.append(self.diag_line)
 
         hint = Gtk.Label(
-            label="Keys: 1 Silent  2 Balanced  3 Sport  4 Turbo  Ctrl+Enter Apply  Ctrl+E Export  Ctrl+I SMU  Ctrl+D Diagnose",
+            label="Keys: 1 Silent  2 Balanced  3 Sport  4 Turbo  5 eGPU  Ctrl+Enter Apply  Ctrl+E Export  Ctrl+I SMU  Ctrl+D Diagnose",
             xalign=0,
         )
         hint.add_css_class("dim-label")
