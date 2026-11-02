@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import grp
 import json
 import os
+import pwd
 import signal
 import socket
 import stat
+import struct
 import sys
 import threading
 import time
@@ -24,6 +27,12 @@ from maxctl.state import (
     save_system_config,
 )
 
+# The socket is world-connectable so the GUI and CLI work as the desktop user.
+# Anyone may read state; changing limits, the fan or the config needs root or
+# a member of the groups Ubuntu's polkit treats as administrators.
+READ_ONLY_COMMANDS = frozenset({"ping", "status", "export", "diagnose"})
+ADMIN_GROUPS = ("sudo", "admin", "wheel")
+
 
 def release_fan() -> bool:
     """Give the fan back to the EC's own curve. Best effort; True on success."""
@@ -32,6 +41,28 @@ def release_fan() -> bool:
     except Exception:
         return False
     return True
+
+
+def peer_credentials(conn: socket.socket) -> tuple[int, int, int]:
+    """(pid, uid, gid) of the process at the other end of a Unix socket."""
+    raw = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
+    return struct.unpack("3i", raw)
+
+
+def is_admin(uid: int, gid: int) -> bool:
+    if uid == 0:
+        return True
+    try:
+        groups = set(os.getgrouplist(pwd.getpwuid(uid).pw_name, gid))
+    except (KeyError, OSError):
+        return False
+    for name in ADMIN_GROUPS:
+        try:
+            if grp.getgrnam(name).gr_gid in groups:
+                return True
+        except KeyError:
+            continue
+    return False
 
 
 class Daemon:
@@ -283,7 +314,15 @@ def _serve(daemon: Daemon, path: str) -> None:
                         break
                     data += chunk
                 msg = json.loads(data.decode().strip() or "{}")
-                reply = daemon.handle(msg)
+                cmd = msg.get("cmd")
+                _pid, uid, gid = peer_credentials(conn)
+                if cmd in READ_ONLY_COMMANDS or is_admin(uid, gid):
+                    reply = daemon.handle(msg)
+                else:
+                    reply = {
+                        "ok": False,
+                        "error": f"permission denied: {cmd} needs root or a user in the sudo, admin or wheel group",
+                    }
             except Exception as exc:
                 reply = {"ok": False, "error": str(exc)}
             conn.sendall((json.dumps(reply) + "\n").encode())

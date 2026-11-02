@@ -65,6 +65,8 @@ Applying TDP needs root and either `acpi_call` (`acpi-call-dkms`) or `ryzenadj`.
 
 Values are clamped and the default ceiling is 40W. Unlocking 54W means more heat and fan noise. maxctl talks to the SMU the same way Motion Assistant and HHD do, and bad limits can still thermal-throttle or trip the machine.
 
+Any local user can read status from the helper. Changing limits, the fan or the config needs root or a user in the `sudo`, `admin` or `wheel` group (the first Ubuntu user is in `sudo`); anyone else gets "permission denied".
+
 If `maxctld` stops, crashes or is killed, the fan goes back to the EC's own control instead of staying at the last speed the software curve or manual PWM gave it. The software curve does the same while neither the CPU nor the GPU temperature can be read.
 
 ## IMU
