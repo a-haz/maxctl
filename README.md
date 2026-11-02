@@ -65,6 +65,8 @@ Applying TDP needs root and either `acpi_call` (`acpi-call-dkms`) or `ryzenadj`.
 
 Values are clamped and the default ceiling is 40W. Unlocking 54W means more heat and fan noise. maxctl talks to the SMU the same way Motion Assistant and HHD do, and bad limits can still thermal-throttle or trip the machine.
 
+If `maxctld` stops, crashes or is killed, the fan goes back to the EC's own control instead of staying at the last speed the software curve or manual PWM gave it.
+
 ## IMU
 
 The Win Max 2 has a Bosch BMI260 IMU. The in-tree `bmi270_i2c` driver exposes it under `/sys/bus/iio/devices` once its init blob loads; linux-firmware ships it as `bmi260-init-data.fw`. `maxctl imu` reads it as your user, no root needed.

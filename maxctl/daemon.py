@@ -5,6 +5,7 @@ import os
 import signal
 import socket
 import stat
+import sys
 import threading
 import time
 from pathlib import Path
@@ -12,10 +13,25 @@ from pathlib import Path
 from maxctl import diagnose, ryzenadj
 from maxctl.apply import apply_settings
 from maxctl.const import SOCKET_PATH
-from maxctl.fan import FanController
+from maxctl.fan import FanController, set_auto
 from maxctl.hardware import detect_device, detect_egpu, read_telemetry
 from maxctl.profiles import PROFILES, Settings, builtin
-from maxctl.state import AppConfig, load_config, load_settings, save_settings, save_system_config
+from maxctl.state import (
+    AppConfig,
+    load_config,
+    load_settings,
+    save_settings,
+    save_system_config,
+)
+
+
+def release_fan() -> bool:
+    """Give the fan back to the EC's own curve. Best effort; True on success."""
+    try:
+        set_auto()
+    except Exception:
+        return False
+    return True
 
 
 class Daemon:
@@ -265,7 +281,10 @@ def _serve(daemon: Daemon, path: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    del argv
+    args = sys.argv[1:] if argv is None else argv
+    if "--release-fan" in args:
+        # Run by the unit's ExecStopPost, so it also covers a killed or crashed helper.
+        return 0 if release_fan() else 1
     path = os.environ.get("MAXCTL_SOCKET", SOCKET_PATH)
     daemon = Daemon()
 
@@ -275,11 +294,26 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
 
-    threading.Thread(target=daemon.loop_background, daemon=True).start()
-    threading.Thread(target=daemon.reapply_loop, daemon=True).start()
+    workers = [
+        threading.Thread(target=daemon.loop_background, daemon=True),
+        threading.Thread(target=daemon.reapply_loop, daemon=True),
+    ]
+    for worker in workers:
+        worker.start()
     try:
-        daemon.apply(daemon.boot_settings())
-    except Exception:
-        pass
-    _serve(daemon, path)
-    return 0
+        try:
+            daemon.apply(daemon.boot_settings())
+        except Exception:
+            pass
+        _serve(daemon, path)
+        requested = daemon.stop.is_set()
+    finally:
+        # Once this process is gone nothing drives the software curve, so do
+        # not leave the EC pinned at the last PWM it was given.
+        daemon.stop.set()
+        for worker in workers:
+            worker.join(timeout=5)
+        release_fan()
+    # The serve loop only ends on its own after an error; exit non-zero so
+    # Restart=on-failure brings the helper back.
+    return 0 if requested else 1

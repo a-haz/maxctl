@@ -5,6 +5,8 @@ After=multi-user.target
 [Service]
 Type=simple
 ExecStart=/opt/maxctl/bin/maxctld
+# Hand the fan back to the EC even if maxctld was killed or crashed.
+ExecStopPost=-/opt/maxctl/bin/maxctld --release-fan
 Restart=on-failure
 RestartSec=2
 
