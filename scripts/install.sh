@@ -48,8 +48,7 @@ chmod 755 "${PREFIX}/bin/"*
 
 if [[ ! -x "${PREFIX}/bin/ryzenadj" ]]; then
   tmp="$(mktemp -d)"
-  git clone --depth 1 --branch v0.19.0 https://github.com/FlyGoat/RyzenAdj.git "${tmp}/RyzenAdj" \
-    || git clone --depth 1 https://github.com/FlyGoat/RyzenAdj.git "${tmp}/RyzenAdj"
+  git clone --depth 1 --branch v0.19.0 https://github.com/FlyGoat/RyzenAdj.git "${tmp}/RyzenAdj"
   cmake -S "${tmp}/RyzenAdj" -B "${tmp}/RyzenAdj/build"
   cmake --build "${tmp}/RyzenAdj/build" -j"$(nproc)"
   install -m 0755 "${tmp}/RyzenAdj/build/ryzenadj" "${PREFIX}/bin/ryzenadj"
