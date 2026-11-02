@@ -107,7 +107,7 @@ PM Table Version: 5d000b
 
     def test_fan_curve(self):
         curve = [CurvePoint(40, 20), CurvePoint(80, 100)]
-        self.assertEqual(interpolate(40, curve), int(round(20 * 2.55)))
+        self.assertEqual(interpolate(40, curve), round(20 * 2.55))
         self.assertEqual(interpolate(80, curve), 255)
         mid = interpolate(60, curve)
         self.assertTrue(80 < mid < 200)

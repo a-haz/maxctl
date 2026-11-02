@@ -15,7 +15,7 @@ from maxctl.client import HelperError, connected, request
 from maxctl.const import GOVERNORS, GPU_DPM_MODES
 from maxctl.fan import DEFAULT_CURVES
 from maxctl.fan_graph import FanCurveGraph
-from maxctl.hardware import detect_device, fill_missing_telemetry, read_telemetry
+from maxctl.hardware import detect_device, fill_missing_telemetry
 from maxctl.profiles import PROFILES, Settings
 from maxctl.state import delete_preset, load_presets, save_preset
 

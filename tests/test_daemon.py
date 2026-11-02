@@ -248,13 +248,15 @@ class SocketTests(unittest.TestCase):
         self.assertEqual(self.daemon.seen, [])
 
 
-class IsAdminTests(unittest.TestCase):
-    GROUPS = {"sudo": 27, "admin": 117}
+_GROUP_IDS = {"sudo": 27, "admin": 117}
 
-    def _getgrnam(self, name):
-        if name not in self.GROUPS:
+
+class IsAdminTests(unittest.TestCase):
+    @staticmethod
+    def _getgrnam(name):
+        if name not in _GROUP_IDS:
             raise KeyError(name)
-        return mock.Mock(gr_gid=self.GROUPS[name])
+        return mock.Mock(gr_gid=_GROUP_IDS[name])
 
     def _is_admin(self, member_of: list[int]) -> bool:
         with (

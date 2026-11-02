@@ -3,7 +3,6 @@ import hashlib
 import io
 import json
 import math
-import re
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout

@@ -16,7 +16,7 @@ from maxctl.const import (
     TDP_SAFE_MAX,
     TDP_UNLOCK_MAX,
 )
-from maxctl.fan import CurvePoint, DEFAULT_CURVES
+from maxctl.fan import DEFAULT_CURVES, CurvePoint
 
 
 @dataclass

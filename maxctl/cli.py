@@ -13,7 +13,13 @@ from maxctl.apply import apply_settings
 from maxctl.client import HelperError, connected, request
 from maxctl.hardware import detect_device, read_telemetry
 from maxctl.profiles import PROFILES, Settings, builtin
-from maxctl.state import delete_preset, load_presets, load_settings, save_preset, save_settings
+from maxctl.state import (
+    delete_preset,
+    load_presets,
+    load_settings,
+    save_preset,
+    save_settings,
+)
 
 
 def _print_telemetry() -> None:
