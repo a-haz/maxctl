@@ -138,6 +138,29 @@ class DaemonExitTests(_DaemonCase):
         self.assertEqual(self.fan_state()[0], FAN_AUTO)
 
 
+class SetConfigTests(_DaemonCase):
+    def test_set_config_ignores_methods_and_wrong_types(self):
+        daemon = daemon_mod.Daemon()
+        reply = daemon.handle(
+            {
+                "cmd": "set_config",
+                "config": {
+                    "reapply_sec": "fast",
+                    "auto_profile": 1,
+                    "to_dict": None,
+                    "unlock": "yes",
+                    "egpu_switch": False,
+                    "ac_profile": "turbo",
+                },
+            }
+        )
+        self.assertTrue(reply["ok"])
+        self.assertEqual(daemon.cfg.reapply_sec, 4.0)
+        self.assertFalse(daemon.cfg.unlock)
+        self.assertFalse(daemon.cfg.egpu_switch)
+        self.assertEqual(daemon.cfg.auto_profile(on_ac=True), "turbo")
+
+
 class _StubDaemon:
     def __init__(self) -> None:
         self.stop = threading.Event()

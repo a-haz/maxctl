@@ -1,11 +1,26 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from maxctl.const import CONFIG_PATH, STATE_PATH, USER_CONFIG_PATH, USER_PRESETS_PATH
 from maxctl.profiles import Settings, builtin
+
+REAPPLY_MIN_SEC = 1.0
+REAPPLY_MAX_SEC = 3600.0
+
+
+def _number(value) -> float | None:
+    """A JSON number as a float (huge values become +-inf); None for NaN or a non-number."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:
+        number = math.inf if value > 0 else -math.inf
+    return None if math.isnan(number) else number
 
 
 @dataclass
@@ -31,15 +46,39 @@ class AppConfig:
 
     @classmethod
     def from_dict(cls, data: dict) -> AppConfig:
-        known = {k: v for k, v in data.items() if k in cls.__dataclass_fields__}
-        return cls(**known)
+        """Config from parsed JSON (a file, set_config or an import bundle).
+
+        A value of the wrong type keeps the default: the root helper reads
+        these fields in its loops, and a string reapply_sec used to kill the
+        re-apply thread.
+        """
+        cfg = cls()
+        if not isinstance(data, dict):
+            return cfg
+        for key, default in asdict(cfg).items():
+            if key not in data:
+                continue
+            value = data[key]
+            if isinstance(default, bool):
+                if isinstance(value, bool) or (type(value) is int and value in (0, 1)):
+                    setattr(cfg, key, bool(value))
+            elif isinstance(default, float):
+                number = _number(value)
+                if number is not None:
+                    setattr(cfg, key, number)
+            elif isinstance(value, type(default)):
+                setattr(cfg, key, value)
+        cfg.reapply_sec = max(REAPPLY_MIN_SEC, min(REAPPLY_MAX_SEC, cfg.reapply_sec))
+        return cfg
 
 
 def _load_json(path: Path) -> dict:
+    """The JSON object in ``path``, or {} if it is missing, unreadable or not an object."""
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
         return {}
+    return data if isinstance(data, dict) else {}
 
 
 def load_config() -> AppConfig:
@@ -67,9 +106,13 @@ def load_settings(cfg: AppConfig | None = None, on_ac: bool | None = None) -> Se
     cfg = cfg or load_config()
     state = _load_json(Path(STATE_PATH))
     if state.get("settings"):
-        settings = Settings.from_dict(state["settings"])
-        settings.unlock = cfg.unlock
-        return settings.clamp()
+        try:
+            settings = Settings.from_dict(state["settings"])
+        except (AttributeError, TypeError, ValueError, ArithmeticError):
+            settings = None  # corrupt state file: fall back to the configured profile
+        if settings is not None:
+            settings.unlock = cfg.unlock
+            return settings.clamp()
     name = cfg.ac_profile if on_ac else cfg.battery_profile
     if name == "custom" and cfg.custom:
         return Settings.from_dict({**cfg.custom, "unlock": cfg.unlock})
@@ -101,8 +144,7 @@ def _presets_path() -> Path:
 
 
 def load_presets() -> dict:
-    data = _load_json(_presets_path())
-    return data if isinstance(data, dict) else {}
+    return _load_json(_presets_path())
 
 
 def save_preset(name: str, bundle: dict) -> None:

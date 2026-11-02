@@ -241,10 +241,7 @@ class Daemon:
             return {"ok": True, "apply": self.apply(settings), "settings": settings.to_dict()}
         if cmd == "set_config":
             data = msg.get("config") or {}
-            for key, value in data.items():
-                if hasattr(self.cfg, key):
-                    setattr(self.cfg, key, value)
-            self.cfg = AppConfig.from_dict(self.cfg.to_dict())
+            self.cfg = AppConfig.from_dict({**self.cfg.to_dict(), **data})
             try:
                 save_system_config(self.cfg)
             except OSError:
