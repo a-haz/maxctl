@@ -261,10 +261,6 @@ def fill_missing_telemetry(tel: dict) -> dict:
     return out
 
 
-def telemetry_dict() -> dict:
-    return asdict(read_telemetry())
-
-
 def _milli_c(path: Path | None) -> float | None:
     if path is None:
         return None

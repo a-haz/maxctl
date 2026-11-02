@@ -14,10 +14,6 @@ def _card() -> Path:
     raise RuntimeError("AMD GPU sysfs not found")
 
 
-def set_auto() -> None:
-    set_dpm("auto")
-
-
 def _read(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8").strip()

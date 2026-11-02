@@ -90,12 +90,6 @@ def load_config() -> AppConfig:
     return AppConfig.from_dict(data)
 
 
-def save_user_config(cfg: AppConfig) -> None:
-    path = Path(USER_CONFIG_PATH).expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(cfg.to_dict(), indent=2) + "\n", encoding="utf-8")
-
-
 def save_system_config(cfg: AppConfig) -> None:
     path = Path(CONFIG_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)

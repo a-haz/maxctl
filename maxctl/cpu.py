@@ -31,10 +31,6 @@ def set_boost(enabled: bool) -> None:
         write_text(cpb, "1" if enabled else "0")
 
 
-def set_min_freq_nonlinear(enabled: bool) -> None:
-    set_freq_limits(0, 0, nonlinear=enabled)
-
-
 def set_freq_limits(min_mhz: int, max_mhz: int, nonlinear: bool = False) -> None:
     sample = Path("/sys/devices/system/cpu/cpu0/cpufreq")
     if min_mhz > 0:

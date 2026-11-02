@@ -16,15 +16,3 @@ def set_profile(name: str) -> None:
     )
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or "powerprofilesctl failed")
-
-
-def get_profile() -> str | None:
-    proc = subprocess.run(
-        ["powerprofilesctl", "get"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        return None
-    return proc.stdout.strip() or None
