@@ -245,6 +245,17 @@ class ImuAnalyzeEdgeTests(TmpDirCase):
         rep = imu.analyze(rec, skip=0.0, motion_gyro_dps=30.0)
         self.assertEqual(rep["motion_check"]["flagged_samples"], 0)
 
+    def test_guard_windows_apply_to_separate_motion_events(self):
+        rec = imu.load(write_rec(
+            self.dir / "two_knocks.csv", n=4001,
+            gyro=lambda i: (0.0, 0.3 if 1000 <= i < 1010 or 3000 <= i < 3010 else 0.002, 0.0),
+        ))
+        rep = imu.analyze(rec, skip=0.0, guard=0.5)
+        self.assertEqual(rep["motion_check"]["flagged_samples"], 20)
+        # Each event also drops 100 neighbouring samples.
+        self.assertEqual(rep["samples_used"], 4001 - 220)
+        self.assertAlmostEqual(rep["gyro_bias_rad_s"][1], 0.002, places=9)
+
     def test_accel_norm_jump_is_flagged(self):
         rec = imu.load(write_rec(self.dir / "a.csv", n=2001,
                                  accel=lambda i: (0.0, 0.0, -11.0 if 1000 <= i < 1010 else -9.8)))
